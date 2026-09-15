@@ -579,6 +579,13 @@ endif
 
 include Makefile.common
 
+# 32-bit iOS has no libc++ with the optional/variant exception classes in it -
+# see LibCxxBackDeploy.cxx, which supplies them. The file is inert everywhere
+# else, but there is no reason to compile it where it is not needed.
+ifeq ($(platform),ios9)
+   SOURCES_CXX += $(CORE_DIR)/os/libretro/LibCxxBackDeploy.cxx
+endif
+
 OBJECTS := $(SOURCES_CXX:.cxx=.o) $(SOURCES_C:.c=.o)
 
 ifeq ($(platform), sncps3)

@@ -1,0 +1,39 @@
+name: Preflight ios9
+
+# Not for upstream. The buildbot's ios9 job is the only place this target gets
+# built, and it failed at link; this runs the same build on a macOS runner so
+# the fix can be tried without waiting for a nightly.
+
+on:
+  push:
+    branches:
+      - preflight-ios9
+  workflow_dispatch:
+
+jobs:
+  ios9:
+    runs-on: macos-15
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          xcodebuild -version
+          xcodebuild -version -sdk iphoneos Path
+
+      - name: Build the core for armv7
+        run: |
+          make -C src/os/libretro -j$(sysctl -n hw.ncpu) platform=ios9
+
+      - name: What came out
+        run: |
+          ls -l src/os/libretro/stella_libretro_ios.dylib
+          lipo -info src/os/libretro/stella_libretro_ios.dylib
+          nm -gU src/os/libretro/stella_libretro_ios.dylib | grep -c "_retro_" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stella_libretro_ios9
+          path: src/os/libretro/stella_libretro_ios.dylib
