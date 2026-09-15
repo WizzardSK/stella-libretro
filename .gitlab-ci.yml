@@ -205,16 +205,30 @@ libretro-build-ios-arm64:
     - git checkout "$OSX_BUILD_COMMIT"
 
 # iOS (armv7, iOS 9)
-libretro-build-ios9:
-  tags:
-    - mac-apple-silicon
-  extends:
-    - .libretro-ios9-make-default
-    - .core-defs
-  before_script:
-    - export NUMPROC=$((1 + $(sysctl -n hw.ncpu)/5))
-    - git fetch origin
-    - git checkout "$OSX_BUILD_COMMIT"
+#
+# Off again after one run. It compiles and then does not link:
+#
+#     Undefined symbols for architecture armv7:
+#       "std::bad_optional_access::~bad_optional_access()"
+#       "vtable for std::bad_variant_access"
+#       "vtable for std::bad_optional_access"
+#
+# Those came to Apple's libc++ with iOS 12, and 32-bit iOS stopped at 10, so
+# armv7 has no system library that carries them - which is not something a
+# build flag here can settle. The include above stays, so turning this back on
+# is uncommenting it once the tree stops reaching for std::optional and
+# std::variant on the throwing path.
+#
+# libretro-build-ios9:
+#   tags:
+#     - mac-apple-silicon
+#   extends:
+#     - .libretro-ios9-make-default
+#     - .core-defs
+#   before_script:
+#     - export NUMPROC=$((1 + $(sysctl -n hw.ncpu)/5))
+#     - git fetch origin
+#     - git checkout "$OSX_BUILD_COMMIT"
 
 # tvOS
 libretro-build-tvos-arm64:
