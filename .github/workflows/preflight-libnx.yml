@@ -1,0 +1,47 @@
+name: Preflight libnx
+
+# Not for upstream. Answers one question before the Switch job goes on the
+# buildbot: does this tree compile with devkitA64 at all? The buildbot's
+# libnx-static template builds the core the same way and then links it into a
+# precompiled RetroArch, which is not reproducible here - the core archive is
+# the part that can fail on a C++23 codebase.
+
+on:
+  push:
+    branches:
+      - preflight-libnx
+  workflow_dispatch:
+
+jobs:
+  libnx:
+    runs-on: ubuntu-latest
+    container: devkitpro/devkita64
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: |
+          export DEVKITPRO=/opt/devkitpro
+          export PATH=/opt/devkitpro/tools/bin:/opt/devkitpro/devkitA64/bin:$PATH
+          aarch64-none-elf-g++ --version | head -1
+          ls /opt/devkitpro/libnx/include/switch.h
+
+      - name: Build the core
+        run: |
+          export DEVKITPRO=/opt/devkitpro
+          export DEVKITA64=/opt/devkitpro/devkitA64
+          export LIBNX=/opt/devkitpro/libnx
+          export PATH=/opt/devkitpro/tools/bin:/opt/devkitpro/devkitA64/bin:$PATH
+          make -C src/os/libretro -j$(nproc) platform=libnx
+
+      - name: What came out
+        run: |
+          ls -l src/os/libretro/stella_libretro_libnx.a
+          /opt/devkitpro/devkitA64/bin/aarch64-none-elf-nm src/os/libretro/stella_libretro_libnx.a | grep -c " T retro_" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stella_libretro_libnx
+          path: src/os/libretro/stella_libretro_libnx.a
