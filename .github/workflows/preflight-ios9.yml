@@ -26,14 +26,25 @@ jobs:
       - name: Build the core for armv7
         run: |
           make -C src/os/libretro -j$(sysctl -n hw.ncpu) platform=ios9
-
-      - name: What came out
-        run: |
           ls -l src/os/libretro/stella_libretro_ios.dylib
           lipo -info src/os/libretro/stella_libretro_ios.dylib
-          nm -gU src/os/libretro/stella_libretro_ios.dylib | grep -c "_retro_" || true
+          mv src/os/libretro/stella_libretro_ios.dylib stella_libretro_ios9.dylib
+
+      # The point of moving the pin is that all four Apple jobs build from the
+      # tip, so the other two are worth the minutes here rather than a nightly.
+      - name: Build the core for arm64
+        run: |
+          make -C src/os/libretro clean
+          make -C src/os/libretro -j$(sysctl -n hw.ncpu) platform=ios-arm64
+          lipo -info src/os/libretro/stella_libretro_ios.dylib
+
+      - name: Build the core for tvOS
+        run: |
+          make -C src/os/libretro clean
+          make -C src/os/libretro -j$(sysctl -n hw.ncpu) platform=tvos-arm64
+          ls -l src/os/libretro/stella_libretro_tvos.dylib
 
       - uses: actions/upload-artifact@v4
         with:
           name: stella_libretro_ios9
-          path: src/os/libretro/stella_libretro_ios.dylib
+          path: stella_libretro_ios9.dylib

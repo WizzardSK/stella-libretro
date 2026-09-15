@@ -24,6 +24,53 @@
 #include "Rect.hxx"
 #include "bspf.hxx"
 
+// Apple's libc++ gained the floating-point half of <charconv> in iOS 16.3,
+// macOS 13.3 and tvOS 16.3, and below that the header does not merely fail to
+// link - it refuses the call outright ("to_chars is unavailable", and the
+// from_chars overloads are deleted). Every Apple target here is built with a
+// deployment minimum older than that, so the two floating-point conversions
+// below go through the C library instead. The integer overloads are
+// header-only and are left alone.
+#if defined(__APPLE__)
+  #define STELLA_NO_FP_CHARCONV
+
+#include <cerrno>
+#include <cstdio>
+#include <cstdlib>
+
+namespace {
+  // The shortest representation that reads back as the same value, which is
+  // what std::to_chars gives and what a settings file wants to look like.
+  template<typename T>
+  inline string fpToString(T value)
+  {
+    char buf[40];
+    int len = 0;
+    for(int prec = 1; prec <= 17; ++prec)
+    {
+      len = std::snprintf(buf, sizeof(buf), "%.*g", prec, static_cast<double>(value));
+      if(len > 0 && static_cast<T>(std::strtod(buf, nullptr)) == value)
+        break;
+    }
+    return len > 0 ? string(buf, len) : string{};
+  }
+
+  template<typename T>
+  inline bool fpFromString(string_view sv, T& out)
+  {
+    const string str{sv};              // strtod needs a terminated string
+    const char* const begin = str.c_str();
+    char* end = nullptr;
+    errno = 0;
+    const double value = std::strtod(begin, &end);
+    if(end == begin)
+      return false;
+    out = static_cast<T>(value);
+    return true;
+  }
+} // namespace
+#endif
+
 /**
   This class implements a variant type using std::variant.  Whenever
   possible, it stores the data as the specific type, so no conversion is
@@ -179,9 +226,16 @@ class Variant
           else if constexpr(std::is_same_v<T, string>)    return v;
           else if constexpr(std::is_same_v<T, bool>)      return v ? "1" : "0";
           else if constexpr(std::is_arithmetic_v<T>) {
-            char buf[32];
-            auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), v);
-            return string(buf, ptr - buf);
+          #ifdef STELLA_NO_FP_CHARCONV
+            if constexpr(std::is_floating_point_v<T>)
+              return fpToString(v);
+            else
+          #endif
+            {
+              char buf[32];
+              auto [ptr, ec] = std::to_chars(buf, buf + sizeof(buf), v);
+              return string(buf, ptr - buf);
+            }
           }
           else
             return v.toString(); // safe
@@ -211,8 +265,12 @@ class Variant
           else if constexpr(std::is_convertible_v<T, string_view>) {
             float result{};
             auto sv = string_view(v);
+          #ifdef STELLA_NO_FP_CHARCONV
+            return fpFromString(sv, result) ? result : 0.F;
+          #else
             const auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), result);
             return (ec == std::errc{}) ? result : 0.F;
+          #endif
           }
           else
             return 0.F;
@@ -226,8 +284,12 @@ class Variant
           else if constexpr(std::is_convertible_v<T, string_view>) {
             double result{};
             auto sv = string_view(v);
+          #ifdef STELLA_NO_FP_CHARCONV
+            return fpFromString(sv, result) ? result : 0.0;
+          #else
             auto [ptr, ec] = std::from_chars(sv.data(), sv.data() + sv.size(), result);
             return (ec == std::errc{}) ? result : 0.0;
+          #endif
           }
           else
             return 0.0;
